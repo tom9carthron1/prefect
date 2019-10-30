@@ -6,6 +6,78 @@ These changes are available in the [master branch](https://github.com/PrefectHQ/
 
 ### Features
 
+- None
+
+### Enhancements
+
+- Add a `save`/`load` interface to Flows - [#1685](https://github.com/PrefectHQ/prefect/pull/1685)
+
+### Task Library
+
+- None
+
+### Deprecations
+
+- None
+
+### Breaking Changes
+
+- None
+
+### Contributors
+
+- None
+
+## 0.7.0 To Affinity and Beyond <Badge text="beta" type="success">
+
+Released October 29, 2019
+
+### Features
+
+- Flow Affinity: Environments and Agents now support labeling for execution specification - [#1651](https://github.com/PrefectHQ/prefect/pull/1651)
+- Add new Secret Tasks for a pluggable and reusable Secrets API - [#1346](https://github.com/PrefectHQ/prefect/issues/1346), [#1587](https://github.com/PrefectHQ/prefect/issues/1587)
+
+### Enhancements
+
+- Add the ability to delete task tag limits using the client - [#1622](https://github.com/PrefectHQ/prefect/pull/1622)
+- Adds an "Ask for help" button with a link to the prefect.io support page - [#1637](https://github.com/PrefectHQ/prefect/pull/1637)
+- Reduces the size of the `prefecthq/prefect` Docker image by ~400MB, which is now the base Docker image used in Flows - [#1648](https://github.com/PrefectHQ/prefect/pull/1648)
+- Add a new healthcheck for environment dependencies - [#1653](https://github.com/PrefectHQ/prefect/pull/1653)
+- Add default 30 second timeout to Client requests - [#1672](https://github.com/PrefectHQ/prefect/pull/1672)
+
+### Task Library
+
+- Add new Secret Tasks for a pluggable and reusable Secrets API - [#1346](https://github.com/PrefectHQ/prefect/issues/1346), [#1587](https://github.com/PrefectHQ/prefect/issues/1587)
+- Add support for directly passing credentials to task library tasks, instead of passing secret names - [#1667](https://github.com/PrefectHQ/prefect/pull/1673)
+
+### Fixes
+
+- Fix defaults for unspecified ARNs in the Fargate Agent - [#1634](https://github.com/PrefectHQ/prefect/pull/1634)
+- Fix ShellTask return value on empty stdout - [#1632](https://github.com/PrefectHQ/prefect/pull/1632)
+- Fix issue with some Cloud Secrets not being converted from strings - [#1655](https://github.com/PrefectHQ/prefect/pull/1655)
+- Fix issue with Agent logging config setting not working - [#1657](https://github.com/PrefectHQ/prefect/pull/1657)
+- Fix issue with SnowflakeQuery tasks not working - [#1663](https://github.com/PrefectHQ/prefect/pull/1663)
+
+### Deprecations
+
+- Tasks that accepted the name of a secret (often `credentials_secret`) will raise a deprecation warning - [#1667](https://github.com/PrefectHQ/prefect/pull/1673)
+
+### Breaking Changes
+
+- Fargate Agent now takes in all boto3 camel case arguments instead of specific snake case options - [#1649](https://github.com/PrefectHQ/prefect/pull/1649)
+- `kubernetes` is no longer installed by default in deployed flow images - [#1653](https://github.com/PrefectHQ/prefect/pull/1653)
+- Tasks that accepted the name of a secret (often `credentials_secret`) no longer have a default value for that argument, as it has been deprecated - [#1667](https://github.com/PrefectHQ/prefect/pull/1673)
+
+### Contributors
+
+- [Tobias Schmidt](https://github.com/royalts)
+
+## 0.6.7 Oh Six Seven <Badge text="beta" type="success"/>
+
+Released October 16, 2019
+
+### Features
+
 - Environments now allow for optional `on_start` and `on_exit` callbacks - [#1610](https://github.com/PrefectHQ/prefect/pull/1610)
 
 ### Enhancements
@@ -18,11 +90,12 @@ These changes are available in the [master branch](https://github.com/PrefectHQ/
 - Agents can accept an optional `name` for logging and debugging - [#1612](https://github.com/PrefectHQ/prefect/pull/1612)
 - Added AWS configuration options for Fargate Agent (task_role_arn, execution_role_arn) - [#1614](https://github.com/PrefectHQ/prefect/pull/1614)
 - Change EmailTask to accept SMTP server settings as well as an email_from kwarg - [#1619](https://github.com/PrefectHQ/prefect/pull/1619)
+- Add the ability to delete task tag limits using the client - [#1622](https://github.com/PrefectHQ/prefect/pull/1622)
 
 ### Task Library
 
 - Add `return_all` kwarg to `ShellTask` for optionally returning all lines of stdout - [#1598](https://github.com/PrefectHQ/prefect/pull/1598)
-- Add `CosmosDBCreateItem`, `CosmosDBReadItems`, `CosmosDBQueryItems` and  for interacting with data stored on Azure Cosmos DB - [#1617](https://github.com/PrefectHQ/prefect/pull/1617)
+- Add `CosmosDBCreateItem`, `CosmosDBReadItems`, `CosmosDBQueryItems` and for interacting with data stored on Azure Cosmos DB - [#1617](https://github.com/PrefectHQ/prefect/pull/1617)
 
 ### Fixes
 
@@ -43,7 +116,7 @@ These changes are available in the [master branch](https://github.com/PrefectHQ/
 - [Mark McDonald](https://github.com/mhmcdonal)
 - [Sherman K](https://github.com/shrmnk)
 
-## 0.6.6 <Badge text="beta" type="success"/>
+## 0.6.6 Wait For It <Badge text="beta" type="success"/>
 
 Released October 3, 2019
 
@@ -86,7 +159,7 @@ Released October 3, 2019
 
 - [Fredrik Sannholm](https://github.com/frsann)
 
-## 0.6.5 <Badge text="beta" type="success"/>
+## 0.6.5 Agents of Environmental Change <Badge text="beta" type="success"/>
 
 Released September 20, 2019
 
@@ -128,7 +201,7 @@ Released September 20, 2019
 
 - [Braun Reyes](https://github.com/braunreyes)
 
-## 0.6.4 <Badge text="beta" type="success"/>
+## 0.6.4 I installed Docker on a Windows machine and all I got was this release <Badge text="beta" type="success"/>
 
 Released September 10, 2019
 
@@ -171,15 +244,17 @@ Released September 10, 2019
 - [Joe Schmid](https://github.com/joeschmid)
 - [Brett Naul](https://github.com/bnaul)
 
-## 0.6.3 <Badge text="beta" type="success"/>
+## 0.6.3 Retry Release <Badge text="beta" type="success"/>
 
 Released August 30, 2019
+
+Maintenance release.
 
 ### Fixes
 
 - Fix issue with reduced mapped tasks not respecting retries - [#1436](https://github.com/PrefectHQ/prefect/issues/1436)
 
-## 0.6.2 <Badge text="beta" type="success"/>
+## 0.6.2 Onboards and Upwards <Badge text="beta" type="success"/>
 
 Released August 30, 2019
 
@@ -231,7 +306,7 @@ Released August 30, 2019
 
 - [Alex Kravetz](http://github.com/akravetz)
 
-## 0.6.1 <Badge text="beta" type="success"/>
+## 0.6.1 Prefect Timing <Badge text="beta" type="success"/>
 
 Released August 8, 2019
 
@@ -271,7 +346,7 @@ Released August 8, 2019
 
 - None
 
-## 0.6.0 <Badge text="beta" type="success"/>
+## 0.6.0 Cloud Ready <Badge text="beta" type="success"/>
 
 Released July 16, 2019
 
@@ -328,7 +403,13 @@ Released July 16, 2019
 - [Kwangyoun Jung](https://github.com/initialkommit)
 - [Anes Benmerzoug](https://github.com/AnesBenmerzoug)
 
-## 0.5.4 <Badge text="beta" type="success"/>
+## 0.5.5 Season 8 <Badge text="beta" type="success"/>
+
+Released May 31, 2019
+
+Bugfix to address an unpinned dependency
+
+## 0.5.4 A Release Has No Name <Badge text="beta" type="success"/>
 
 Released May 28, 2019
 
@@ -379,7 +460,7 @@ Released May 28, 2019
 - [Jeremiah Lewis](https://github.com/jlewis91)
 - [Dave Hirschfeld](https://github.com/dhirschfeld)
 
-## 0.5.3 <Badge text="beta" type="success"/>
+## 0.5.3 The Release is Bright and Full of Features <Badge text="beta" type="success"/>
 
 Released May 7, 2019
 
@@ -427,7 +508,7 @@ Released May 7, 2019
 
 - None
 
-## 0.5.2 <Badge text="beta" type="success"/>
+## 0.5.2 Unredacted <Badge text="beta" type="success"/>
 
 Released April 19, 2019
 
@@ -464,7 +545,7 @@ Released April 19, 2019
 
 - None
 
-## 0.5.1 <Badge text="beta" type="success"/>
+## 0.5.1 It Takes a Village <Badge text="beta" type="success"/>
 
 Released April 4, 2019
 
@@ -510,7 +591,7 @@ Released April 4, 2019
 - [Miloš Garunović](https://github.com/milosgarunovic)
 - [Nash Taylor](https://github.com/ntaylorwss)
 
-## 0.5.0 <Badge text="beta" type="success"/>
+## 0.5.0 Open Source Launch! <Badge text="beta" type="success"/>
 
 Released March 24, 2019
 

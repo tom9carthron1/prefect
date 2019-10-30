@@ -36,6 +36,7 @@ from prefect.engine.state import (
     TriggerFailed,
 )
 from prefect.engine.task_runner import TaskRunner
+from prefect.tasks.secrets import Secret
 from prefect.triggers import any_failed, manual_only
 from prefect.utilities.debug import raise_on_exception
 
@@ -264,6 +265,23 @@ def test_flow_runner_remains_running_if_tasks_are_retrying():
     assert flow_state.is_running()
     assert flow_state.result[task1].is_successful()
     assert flow_state.result[task2].is_retrying()
+
+
+def test_secrets_retry_by_default_and_pull_from_context():
+    flow = Flow(name="test")
+    task1 = Secret("foo")
+
+    flow.add_task(task1)
+
+    flow_state = FlowRunner(flow=flow).run(return_tasks=[task1])
+    assert flow_state.is_running()
+    assert flow_state.result[task1].is_retrying()
+
+    with prefect.context(secrets=dict(foo=42)):
+        time.sleep(1)
+        flow_state = FlowRunner(flow=flow).run(task_states=flow_state.result)
+
+    assert flow_state.is_successful()
 
 
 def test_flow_runner_doesnt_return_by_default():
@@ -509,7 +527,7 @@ class TestRunFlowStep:
         assert new_state.message == "Very specific error message"
 
     def test_determine_final_state_preserves_running_states_when_tasks_still_running(
-        self
+        self,
     ):
         task = Task()
         flow = Flow(name="test", tasks=[task])
@@ -541,8 +559,8 @@ class TestInputCaching:
 
         a_state = first_state.result[a_res]
         a_state.result = (
-            NoResult
-        )  # remove the result to see if the cached results are picked up
+            NoResult  # remove the result to see if the cached results are picked up
+        )
         b_state = first_state.result[b_res]
         b_state.cached_inputs = dict(x=Result(2))  # artificially alter state
 
@@ -570,8 +588,8 @@ class TestInputCaching:
 
         a_state = first_state.result[a_res]
         a_state.result = (
-            NoResult
-        )  # remove the result to see if the cached results are picked up
+            NoResult  # remove the result to see if the cached results are picked up
+        )
         b_state = first_state.result[b_res]
         b_state.cached_inputs = dict(x=Result(2))  # artificially alter state
 
@@ -1352,7 +1370,7 @@ class TestContext:
         assert flow_state.result[grab_key].result == 42
 
     def test_flow_runner_passes_along_its_init_context_to_tasks_after_serialization(
-        self
+        self,
     ):
         @prefect.task
         def grab_key():
@@ -1382,7 +1400,7 @@ class TestContext:
         )
 
     def test_flow_runner_does_override_scheduled_start_time_when_running_off_schedule(
-        self
+        self,
     ):
         @prefect.task
         def return_scheduled_start_time():
@@ -1396,7 +1414,7 @@ class TestContext:
         assert res.result[return_scheduled_start_time].result == 42
 
     def test_flow_runner_doesnt_override_scheduled_start_time_when_running_on_schedule(
-        self
+        self,
     ):
         @prefect.task
         def return_scheduled_start_time():

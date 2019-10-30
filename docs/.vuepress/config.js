@@ -5,6 +5,8 @@ const sidebar62 = require('../api/0.6.2/sidebar')
 const sidebar64 = require('../api/0.6.4/sidebar')
 const sidebar65 = require('../api/0.6.5/sidebar')
 const sidebar66 = require('../api/0.6.6/sidebar')
+const sidebar67 = require('../api/0.6.7/sidebar')
+const sidebar70 = require('../api/0.7.0/sidebar')
 const glob = require('glob')
 
 // function for loading all MD files in a directory
@@ -59,12 +61,14 @@ module.exports = {
       },
       {
         text: "Prefect Cloud",
-        link: "/cloud/first-steps"
+        link: "/cloud/the-basics"
       },
       {
         text: "API Reference",
         items: [
           { text: "Unreleased", link: "/api/unreleased/" },
+          { text: "0.7.0", link: "/api/0.7.0/" },
+          { text: "0.6.7", link: "/api/0.6.7/" },
           { text: "0.6.6", link: "/api/0.6.6/" },
           { text: "0.6.5", link: "/api/0.6.5/" },
           { text: "0.6.4", link: "/api/0.6.4/" },
@@ -83,10 +87,12 @@ module.exports = {
       "/api/0.6.4/": sidebar64.sidebar,
       "/api/0.6.5/": sidebar65.sidebar,
       "/api/0.6.6/": sidebar66.sidebar,
+      "/api/0.6.7/": sidebar67.sidebar,
+      "/api/0.7.0/": sidebar70.sidebar,
       "/api/unreleased/": [
         { title: "API Reference", path: "/api/unreleased/" },
         "changelog",
-        "coverage",
+        { title: "Test Coverage", path: "https://codecov.io/gh/PrefectHQ/prefect" },
         {
           title: "prefect",
           collapsable: true,
@@ -137,7 +143,7 @@ module.exports = {
         {
           title: "Welcome",
           collapsable: false,
-          children: ["first-steps", "dataflow", "faq", "upandrunning"]
+          children: ["the-basics", "upandrunning", "flow-deploy", "dataflow", "deployment", "faq"]
         },
         {
           title: "Cloud Concepts",

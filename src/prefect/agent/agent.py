@@ -1,6 +1,7 @@
+import ast
 import logging
 import time
-from typing import Union
+from typing import Iterable, Union
 
 import pendulum
 
@@ -38,10 +39,13 @@ class Agent:
     Args:
         - name (str, optional): An optional name to give this agent. Can also be set through
             the environment variable `PREFECT__CLOUD__AGENT__NAME`. Defaults to "agent"
+        - labels (List[str], optional): a list of labels, which are arbitrary string identifiers used by Prefect
+            Agents when polling for work
     """
 
-    def __init__(self, name: str = None) -> None:
+    def __init__(self, name: str = None, labels: Iterable[str] = None) -> None:
         self.name = name or config.cloud.agent.get("name", "agent")
+        self.labels = labels or ast.literal_eval(config.cloud.agent.get("labels", "[]"))
 
         token = config.cloud.agent.get("auth_token")
 
@@ -113,7 +117,9 @@ class Agent:
             - str: The current tenant id
         """
         print(ascii_name)
-        self.logger.info("Starting {}".format(type(self).__name__))
+        self.logger.info(
+            "Starting {} with labels {}".format(type(self).__name__, self.labels)
+        )
         self.logger.info(
             "Agent documentation can be found at https://docs.prefect.io/cloud/"
         )
@@ -201,7 +207,13 @@ class Agent:
         now = pendulum.now("UTC")
         result = self.client.graphql(
             mutation,
-            variables={"input": {"tenantId": tenant_id, "before": now.isoformat()}},
+            variables={
+                "input": {
+                    "tenantId": tenant_id,
+                    "before": now.isoformat(),
+                    "labels": self.labels,
+                }
+            },
         )
         flow_run_ids = result.data.getRunsInQueue.flow_run_ids  # type: ignore
         self.logger.debug("Found flow runs {}".format(flow_run_ids))
