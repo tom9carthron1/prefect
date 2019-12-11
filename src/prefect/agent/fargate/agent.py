@@ -50,6 +50,7 @@ class FargateAgent(Agent):
         aws_secret_access_key: str = None,
         aws_session_token: str = None,
         region_name: str = None,
+        enable_task_revisions: bool = False,
         **kwargs
     ) -> None:
         super().__init__(name=name, labels=labels)
@@ -89,6 +90,7 @@ class FargateAgent(Agent):
             tuple: a tuple of two dictionaries (task_definition_kwargs, task_run_kwargs)
         """
         definition_kwarg_list = [
+            "family",
             "taskRoleArn",
             "executionRoleArn",
             "volumes",
@@ -104,6 +106,7 @@ class FargateAgent(Agent):
 
         run_kwarg_list = [
             "cluster",
+            "taskDefinition",
             "count",
             "startedBy",
             "group",
@@ -194,13 +197,15 @@ class FargateAgent(Agent):
         from botocore.exceptions import ClientError
 
         try:
-            self.boto3_client.describe_task_definition(
-                taskDefinition="prefect-task-{}".format(
-                    flow_run.flow.id[:8]  # type: ignore
+            task_definition = self.task_definition_kwargs.get("family", "prefect-task-{}".format(
+                flow_run.flow.id[:8]  # type: ignore
                 )
             )
+            self.boto3_client.describe_task_definition(
+                taskDefinition=task_definition
+            )
             self.logger.debug(
-                "Task definition {} found".format(flow_run.flow.id[:8])  # type: ignore
+                "Task definition {} found".format(task_definition)  # type: ignore
             )
         except ClientError:
             return False
@@ -259,11 +264,14 @@ class FargateAgent(Agent):
             )
         )
         self.boto3_client.register_task_definition(
-            family="prefect-task-{}".format(flow_run.flow.id[:8]),  # type: ignore
+            family=self.task_definition_kwargs.get("family", "prefect-task-{}".format(
+                flow_run.flow.id[:8]  # type: ignore
+                )
+            ),  # type: ignore
             containerDefinitions=container_definitions,
             requiresCompatibilities=["FARGATE"],
             networkMode="awsvpc",
-            **self.task_definition_kwargs
+            **{k: v for k, v in self.task_definition_kwargs.items() if k != "family"}
         )
 
     def _run_task(self, flow_run: GraphQLResult) -> None:
@@ -300,12 +308,13 @@ class FargateAgent(Agent):
             )
         )
         self.boto3_client.run_task(
-            taskDefinition="prefect-task-{}".format(
+            taskDefinition=self.task_run_kwargs.get("taskDefinition", "prefect-task-{}".format(
                 flow_run.flow.id[:8]  # type: ignore
+                )
             ),
             overrides={"containerOverrides": container_overrides},
             launchType="FARGATE",
-            **self.task_run_kwargs
+            **{k: v for k, v in self.task_run_kwargs.items() if k != "taskDefinition"}
         )
 
 
