@@ -50,7 +50,6 @@ class FargateAgent(Agent):
         aws_secret_access_key: str = None,
         aws_session_token: str = None,
         region_name: str = None,
-        enable_task_revisions: bool = False,
         **kwargs
     ) -> None:
         super().__init__(name=name, labels=labels)
