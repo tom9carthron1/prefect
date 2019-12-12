@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from prefect.agent.fargate import FargateAgent
-from prefect.environments.storage import Docker
+from prefect.environments.storage import Docker, Local
 from prefect.utilities.configuration import set_temporary_config
 from prefect.utilities.graphql import GraphQLResult
 
@@ -390,7 +390,7 @@ def test_fargate_agent_config_env_vars_lists_dicts(monkeypatch, runner_token):
 def test_deploy_flows(monkeypatch, runner_token):
     boto3_client = MagicMock()
 
-    boto3_client.describe_task_definition.return_value = {}
+    boto3_client.describe_task_definition.return_value = {"tags": []}
     boto3_client.run_task.return_value = {}
 
     monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
@@ -417,12 +417,149 @@ def test_deploy_flows(monkeypatch, runner_token):
 
     assert boto3_client.describe_task_definition.called
     assert boto3_client.run_task.called
+    assert agent.task_definition_name == "prefect-task-id"
+
+
+def test_deploy_flows_enable_task_revisions_no_tags(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": []}
+    boto3_client.run_task.return_value = {}
+    boto3_client.register_task_definition.return_value = {}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id",
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+
+    assert boto3_client.describe_task_definition.called
+    assert boto3_client.register_task_definition.called
+    assert boto3_client.run_task.called
+    assert agent.task_definition_name == "name"
+
+
+def test_deploy_flows_enable_task_revisions_tags_current(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": [{"key": "PrefectFlowId", "value": "id"}]}
+    boto3_client.run_task.return_value = {}
+    boto3_client.register_task_definition.return_value = {}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id",
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+    print(agent.task_definition_kwargs)
+    assert boto3_client.describe_task_definition.called
+    assert boto3_client.register_task_definition.not_called
+    assert boto3_client.run_task.called
+    assert agent.task_definition_name == "name"
+
+
+def test_deploy_flows_enable_task_revisions_tags_new(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": [{"key": "PrefectFlowId", "value": "old_id"}]}
+    boto3_client.run_task.return_value = {}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id",
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+    print(agent.task_definition_kwargs)
+    assert boto3_client.describe_task_definition.called
+    assert {"key": "PrefectFlowId", "value": "id"} in agent.task_definition_kwargs["tags"]
+    assert boto3_client.run_task.called
+    assert agent.task_definition_name == "name"
+
+
+def test_deploy_flows_require_docker_storage(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": []}
+    boto3_client.run_task.return_value = {}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+    agent = FargateAgent()
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Local().serialize(),
+                            "id": "id",
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+    assert boto3_client.describe_task_definition.not_called
+    assert boto3_client.run_task.not_called
 
 
 def test_deploy_flows_all_args(monkeypatch, runner_token):
     boto3_client = MagicMock()
 
-    boto3_client.describe_task_definition.return_value = {}
+    boto3_client.describe_task_definition.return_value = {"tags": []}
     boto3_client.run_task.return_value = {}
 
     monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))

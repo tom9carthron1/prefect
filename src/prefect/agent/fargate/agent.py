@@ -38,6 +38,12 @@ class FargateAgent(Agent):
             `AWS_SESSION_TOKEN` or `None`
         - region_name (str, optional): AWS region name for connecting the boto3 client.
             Defaults to the value set in the environment variable `REGION_NAME` or `None`
+        - enable_task_revisions (bool, optional): Enable registration of task definitions using revisions.
+            When enabled, task definitions will use flow name as opposed to flow id. Your flow's task definition will be
+            registered with a tag called 'PrefectFlowId'.
+            If the current 'ACTIVE' task definition has a different PrefectFlowId, a new task definition
+            will get registered, creating a relationship between flow versions and task definition revisions.
+            Defaults to False.
         - **kwargs (dict, optional): additional keyword arguments to pass to boto3 for
             `register_task_definition` and `run_task`
     """
@@ -50,6 +56,7 @@ class FargateAgent(Agent):
         aws_secret_access_key: str = None,
         aws_session_token: str = None,
         region_name: str = None,
+        enable_task_revisions: bool = False,
         **kwargs
     ) -> None:
         super().__init__(name=name, labels=labels)
@@ -66,6 +73,10 @@ class FargateAgent(Agent):
 
         # Parse accepted kwargs for definition and run
         self.task_definition_kwargs, self.task_run_kwargs = self._parse_kwargs(kwargs)
+
+        # task definitionn configurations
+        self.enable_task_revisions = enable_task_revisions
+        self.task_definition_name = None
 
         # Client initialization
         self.boto3_client = boto3_client(
@@ -89,7 +100,6 @@ class FargateAgent(Agent):
             tuple: a tuple of two dictionaries (task_definition_kwargs, task_run_kwargs)
         """
         definition_kwarg_list = [
-            "family",
             "taskRoleArn",
             "executionRoleArn",
             "volumes",
@@ -105,7 +115,6 @@ class FargateAgent(Agent):
 
         run_kwarg_list = [
             "cluster",
-            "taskDefinition",
             "count",
             "startedBy",
             "group",
@@ -166,6 +175,12 @@ class FargateAgent(Agent):
             self.logger.debug(
                 "Deploying flow run {}".format(flow_run.id)  # type: ignore
             )
+            if self.enable_task_revisions:
+                self.task_definition_name = flow_run.flow.name
+            else:
+                self.task_definition_name = "prefect-task-{}".format(
+                    flow_run.flow.id[:8]  # type: ignore
+                )
 
             # Require Docker storage
             if not isinstance(StorageSchema().load(flow_run.flow.storage), Docker):
@@ -196,20 +211,27 @@ class FargateAgent(Agent):
         from botocore.exceptions import ClientError
 
         try:
-            task_definition = self.task_definition_kwargs.get("family", "prefect-task-{}".format(
-                flow_run.flow.id[:8]  # type: ignore
-                )
+            definition_exists = True
+            task_definition_name = self.task_definition_name
+            definition_response = self.boto3_client.describe_task_definition(
+                taskDefinition=task_definition_name,
+                include=[
+                    "TAGS",
+                ]
             )
-            self.boto3_client.describe_task_definition(
-                taskDefinition=task_definition
-            )
+            if self.enable_task_revisions:
+                definition_exists = False
+                for i in definition_response["tags"]:
+                    if i["key"] == "PrefectFlowId" and i["value"] == flow_run.flow.id[:8]:
+                        definition_exists = True
+                        break
             self.logger.debug(
-                "Task definition {} found".format(task_definition)  # type: ignore
+                "Task definition {} found".format(task_definition_name)  # type: ignore
             )
         except ClientError:
             return False
 
-        return True
+        return definition_exists
 
     def _create_task_definition(self, flow_run: GraphQLResult) -> None:
         """
@@ -224,6 +246,15 @@ class FargateAgent(Agent):
                 StorageSchema().load(flow_run.flow.storage).name  # type: ignore
             )
         )
+        task_definition_name = self.task_definition_name
+        if self.enable_task_revisions:
+            # add flow id to definition tags
+            if not self.task_definition_kwargs.get("tags"):
+                self.task_definition_kwargs["tags"] = []
+            self.task_definition_kwargs["tags"].append({
+                "key": "PrefectFlowId",
+                "value": flow_run.flow.id[:8]
+            })
         container_definitions = [
             {
                 "name": "flow",
@@ -259,18 +290,15 @@ class FargateAgent(Agent):
         # Register task definition
         self.logger.debug(
             "Registering task definition {}".format(
-                flow_run.flow.id[:8]  # type: ignore
+                task_definition_name  # type: ignore
             )
         )
         self.boto3_client.register_task_definition(
-            family=self.task_definition_kwargs.get("family", "prefect-task-{}".format(
-                flow_run.flow.id[:8]  # type: ignore
-                )
-            ),  # type: ignore
+            family=task_definition_name,
             containerDefinitions=container_definitions,
             requiresCompatibilities=["FARGATE"],
             networkMode="awsvpc",
-            **{k: v for k, v in self.task_definition_kwargs.items() if k != "family"}
+            **self.task_definition_kwargs
         )
 
     def _run_task(self, flow_run: GraphQLResult) -> None:
@@ -299,21 +327,18 @@ class FargateAgent(Agent):
                 ],
             }
         ]
-
+        task_definition_name = self.task_definition_name
         # Run task
         self.logger.debug(
             "Running task using task definition {}".format(
-                flow_run.flow.id[:8]  # type: ignore
+                task_definition_name  # type: ignore
             )
         )
         self.boto3_client.run_task(
-            taskDefinition=self.task_run_kwargs.get("taskDefinition", "prefect-task-{}".format(
-                flow_run.flow.id[:8]  # type: ignore
-                )
-            ),
+            taskDefinition=task_definition_name,
             overrides={"containerOverrides": container_overrides},
             launchType="FARGATE",
-            **{k: v for k, v in self.task_run_kwargs.items() if k != "taskDefinition"}
+            **self.task_run_kwargs
         )
 
 

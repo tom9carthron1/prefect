@@ -1,6 +1,7 @@
 import os
 import tempfile
 from unittest.mock import MagicMock
+import pytest
 
 import cloudpickle
 
@@ -274,6 +275,90 @@ def test_setup_definition_register(monkeypatch):
     ]
 
 
+def test_setup_definition_register_enable_task_revisions(monkeypatch):
+    boto3_client = MagicMock()
+    boto3_client.describe_task_definition.return_value = {"tags": []}
+    boto3_client.register_task_definition.return_value = {}
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    environment = FargateTaskEnvironment(
+        family="test",
+        enable_task_revisions=True,
+        containerDefinitions=[
+            {
+                "name": "flow-container",
+                "image": "image",
+                "command": [],
+                "environment": [],
+                "essential": True,
+            }
+        ],
+    )
+
+    environment.setup(Docker(registry_url="test", image_name="image", image_tag="tag"))
+
+    assert boto3_client.describe_task_definition.called
+    assert boto3_client.register_task_definition.called
+    assert boto3_client.register_task_definition.call_args[1]["family"] == "test"
+    assert boto3_client.register_task_definition.call_args[1]["tags"] == [{"key": "PrefectFlowId", "value": "unknown"}]
+    assert boto3_client.register_task_definition.call_args[1][
+               "containerDefinitions"
+           ] == [
+               {
+                   "name": "flow-container",
+                   "image": "test/image:tag",
+                   "command": [
+                       "/bin/sh",
+                       "-c",
+                       "python -c 'import prefect; prefect.Flow.load(prefect.context.flow_file_path).environment.run_flow()'",
+                   ],
+                   "environment": [
+                       {
+                           "name": "PREFECT__CLOUD__GRAPHQL",
+                           "value": prefect.config.cloud.graphql,
+                       },
+                       {"name": "PREFECT__CLOUD__USE_LOCAL_SECRETS", "value": "false"},
+                       {
+                           "name": "PREFECT__ENGINE__FLOW_RUNNER__DEFAULT_CLASS",
+                           "value": "prefect.engine.cloud.CloudFlowRunner",
+                       },
+                       {
+                           "name": "PREFECT__ENGINE__TASK_RUNNER__DEFAULT_CLASS",
+                           "value": "prefect.engine.cloud.CloudTaskRunner",
+                       },
+                       {"name": "PREFECT__LOGGING__LOG_TO_CLOUD", "value": "true"},
+                   ],
+                   "essential": True,
+               }
+           ]
+
+
+def test_setup_definition_no_register_enable_task_revisions(monkeypatch):
+    boto3_client = MagicMock()
+    boto3_client.describe_task_definition.return_value = {"tags": [{"key": "PrefectFlowId", "value": "unknown"}]}
+    boto3_client.register_task_definition.return_value = {}
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    environment = FargateTaskEnvironment(
+        family="test",
+        enable_task_revisions=True,
+        containerDefinitions=[
+            {
+                "name": "flow-container",
+                "image": "image",
+                "command": [],
+                "environment": [],
+                "essential": True,
+            }
+        ],
+    )
+
+    environment.setup(Docker(registry_url="test", image_name="image", image_tag="tag"))
+
+    assert boto3_client.describe_task_definition.called
+    assert boto3_client.register_task_definition.not_called
+
+
 def test_setup_definition_register_no_defintions(monkeypatch):
     boto3_client = MagicMock()
     boto3_client.describe_task_definition.side_effect = ClientError({}, None)
@@ -412,6 +497,32 @@ def test_run_flow_calls_callbacks(monkeypatch):
 
     assert start_func.called
     assert exit_func.called
+
+
+def test_run_flow_exeception(monkeypatch):
+
+    environment = FargateTaskEnvironment()
+
+    flow_runner = MagicMock(side_effect=Exception())
+    monkeypatch.setattr(
+        "prefect.engine.get_default_flow_runner_class",
+        MagicMock(return_value=flow_runner),
+    )
+    with pytest.raises(Exception) as excinfo:
+        with tempfile.TemporaryDirectory() as directory:
+            with open(os.path.join(directory, "flow_env.prefect"), "w+"):
+                flow = prefect.Flow("test")
+                flow_path = os.path.join(directory, "flow_env.prefect")
+                with open(flow_path, "wb") as f:
+                    cloudpickle.dump(flow, f)
+
+            with set_temporary_config({"cloud.auth_token": "test"}):
+                with prefect.context(
+                        flow_file_path=os.path.join(directory, "flow_env.prefect")
+                ):
+                    environment.run_flow()
+
+        assert flow_runner.call_args[1]["flow"].name == "test"
 
 
 def test_entire_environment_process_together(monkeypatch):
