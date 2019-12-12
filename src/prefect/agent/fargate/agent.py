@@ -42,7 +42,7 @@ class FargateAgent(Agent):
             When enabled, task definitions will use flow name as opposed to flow id. Your flow's task definition will be
             registered with a tag called 'PrefectFlowId'.
             If the current 'ACTIVE' task definition has a different PrefectFlowId, a new task definition
-            will get registered, creating a relationship between flow versions and task definition revisions.
+            will get registered the and current task definition will be de-registered.
             Defaults to False.
         - **kwargs (dict, optional): additional keyword arguments to pass to boto3 for
             `register_task_definition` and `run_task`
@@ -74,7 +74,7 @@ class FargateAgent(Agent):
         # Parse accepted kwargs for definition and run
         self.task_definition_kwargs, self.task_run_kwargs = self._parse_kwargs(kwargs)
 
-        # task definitionn configurations
+        # task definition configurations
         self.enable_task_revisions = enable_task_revisions
         self.task_definition_name = None
 
@@ -175,7 +175,9 @@ class FargateAgent(Agent):
             self.logger.debug(
                 "Deploying flow run {}".format(flow_run.id)  # type: ignore
             )
+            # set proper task_definition_name based on enable_task_revisions flag
             if self.enable_task_revisions:
+                self.logger.debug("Native ECS task revisions enabled")
                 self.task_definition_name = flow_run.flow.name
             else:
                 self.task_definition_name = "prefect-task-{}".format(
@@ -219,18 +221,22 @@ class FargateAgent(Agent):
                     "TAGS",
                 ]
             )
+            # if current active task definition has current flow id, then exists
             if self.enable_task_revisions:
                 definition_exists = False
                 for i in definition_response["tags"]:
                     if i["key"] == "PrefectFlowId" and i["value"] == flow_run.flow.id[:8]:
+                        self.logger.debug(
+                            "Active task definition for {} already exists".format(flow_run.flow.id[:8])  # type: ignore
+                        )
                         definition_exists = True
                         break
-            self.logger.debug(
-                "Task definition {} found".format(task_definition_name)  # type: ignore
-            )
+            else:
+                self.logger.debug(
+                    "Task definition {} found".format(task_definition_name)  # type: ignore
+                )
         except ClientError:
             return False
-
         return definition_exists
 
     def _create_task_definition(self, flow_run: GraphQLResult) -> None:
@@ -251,10 +257,17 @@ class FargateAgent(Agent):
             # add flow id to definition tags
             if not self.task_definition_kwargs.get("tags"):
                 self.task_definition_kwargs["tags"] = []
-            self.task_definition_kwargs["tags"].append({
-                "key": "PrefectFlowId",
-                "value": flow_run.flow.id[:8]
-            })
+            append_tag = True
+            for i in self.task_definition_kwargs["tags"]:
+                if i["key"] == "PrefectFlowId":
+                    i["value"] = flow_run.flow.id[:8]
+                    append_tag = False
+            if append_tag:
+                self.task_definition_kwargs["tags"].append({
+                    "key": "PrefectFlowId",
+                    "value": flow_run.flow.id[:8]
+                })
+            print(self.task_definition_kwargs["tags"])
         container_definitions = [
             {
                 "name": "flow",

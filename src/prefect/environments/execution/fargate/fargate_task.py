@@ -65,11 +65,9 @@ class FargateTaskEnvironment(Environment):
         - on_start (Callable, optional): a function callback which will be called before the flow begins to run
         - on_exit (Callable, optional): a function callback which will be called after the flow finishes its run
         - enable_task_revisions (bool, optional): Enable registration of task definitions using revisions.
-            Going forward new task definitions will register your flow's task definition with a tag
-            called 'PrefectFlowId'.
-            When running the environment with this flag enabled, a new task definition will get created when the flow_id
-            has been updated, creating a relationship between flow versions and task definition revisions.
-            This allows the ability to update task definition specific properties at the individual flow level.
+            When enabled, your flow's task definition will be registered with a tag called 'PrefectFlowId'.
+            If the current 'ACTIVE' task definition has a different PrefectFlowId, a new task definition
+            will get registered and the current task definition will be de-registered.
             Defaults to False.
         - **kwargs (dict, optional): additional keyword arguments to pass to boto3 for
             `register_task_definition` and `run_task`
@@ -121,7 +119,6 @@ class FargateTaskEnvironment(Environment):
             "containerDefinitions",
             "volumes",
             "placementConstraints",
-            "requiresCompatibilities",
             "cpu",
             "memory",
             "tags",
@@ -162,7 +159,7 @@ class FargateTaskEnvironment(Environment):
     def dependencies(self) -> list:
         return ["boto3", "botocore"]
 
-    def setup(self, storage: "Docker") -> None:  # type: ignore
+    def setup(self, storage: "Docker") -> bool:  # type: ignore
         """
         Register the task definition if it does not already exist.
 
@@ -197,10 +194,16 @@ class FargateTaskEnvironment(Environment):
                 # add flow id to definition tags
                 if not self.task_definition_kwargs.get("tags"):
                     self.task_definition_kwargs["tags"] = []
-                self.task_definition_kwargs["tags"].append({
-                    "key": "PrefectFlowId",
-                    "value": flow_id
-                })
+                append_tag = True
+                for i in self.task_definition_kwargs["tags"]:
+                    if i["key"] == "PrefectFlowId":
+                        i["value"] = flow_id
+                        append_tag = False
+                if append_tag:
+                    self.task_definition_kwargs["tags"].append({
+                        "key": "PrefectFlowId",
+                        "value": flow_id
+                    })
 
         except ClientError:
             definition_exists = False
@@ -258,7 +261,7 @@ class FargateTaskEnvironment(Environment):
                 "-c",
                 "python -c 'import prefect; prefect.Flow.load(prefect.context.flow_file_path).environment.run_flow()'",
             ]
-            boto3_c.register_task_definition(**self.task_definition_kwargs)
+            boto3_c.register_task_definition(requiresCompatibilities=["FARGATE"], **self.task_definition_kwargs)
 
     def execute(  # type: ignore
         self, storage: "Docker", flow_location: str, **kwargs: Any
