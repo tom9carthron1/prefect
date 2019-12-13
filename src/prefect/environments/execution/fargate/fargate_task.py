@@ -298,12 +298,12 @@ class FargateTaskEnvironment(Environment):
                 append_tag = True
                 for i in self.task_definition_kwargs["tags"]:
                     if i["key"] == "PrefectFlowVersion":
-                        i["value"] = flow_version
+                        i["value"] = str(flow_version)
                         append_tag = False
                 if append_tag:
                     self.task_definition_kwargs["tags"].append({
                         "key": "PrefectFlowVersion",
-                        "value": flow_version
+                        "value": str(flow_version)
                     })
             boto3_c.register_task_definition(
                 requiresCompatibilities=["FARGATE"],
