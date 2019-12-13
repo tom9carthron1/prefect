@@ -178,6 +178,8 @@ class FargateTaskEnvironment(Environment):
             region_name=self.region_name,
         )
         if self.enable_task_revisions:
+            flow_id = prefect.context.get("flow_id", "unknown")[:8]
+            flow_version = int(prefect.context.get("flow_version", "0"))
             boto3_client_tags = boto3_client(
                 "resourcegroupstaggingapi",
                 aws_access_key_id=self.aws_access_key_id,
@@ -194,8 +196,6 @@ class FargateTaskEnvironment(Environment):
                 ]
             )
             if self.enable_task_revisions:
-                flow_id = prefect.context.get("flow_id", "unknown")[:8]
-                flow_version = int(prefect.context.get("flow_version", "0"))
                 definition_exists = False
                 tag_dict = {x['key']: x['value'] for x in definition_response["tags"]}
                 current_flow_id = tag_dict.get('PrefectFlowId')
