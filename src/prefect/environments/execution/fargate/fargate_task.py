@@ -225,29 +225,6 @@ class FargateTaskEnvironment(Environment):
                             "Active task definition for {} already exists".format(flow_id)  # type: ignore
                         )
                         definition_exists = True
-                # add flow id to definition tags
-                if not self.task_definition_kwargs.get("tags"):
-                    self.task_definition_kwargs["tags"] = []
-                append_tag = True
-                for i in self.task_definition_kwargs["tags"]:
-                    if i["key"] == "PrefectFlowId":
-                        i["value"] = flow_id
-                        append_tag = False
-                if append_tag:
-                    self.task_definition_kwargs["tags"].append({
-                        "key": "PrefectFlowId",
-                        "value": flow_id
-                    })
-                append_tag = True
-                for i in self.task_definition_kwargs["tags"]:
-                    if i["key"] == "PrefectFlowVersion":
-                        i["value"] = flow_version
-                        append_tag = False
-                if append_tag:
-                    self.task_definition_kwargs["tags"].append({
-                        "key": "PrefectFlowVersion",
-                        "value": flow_version
-                    })
         except ClientError:
             definition_exists = False
 
@@ -304,6 +281,30 @@ class FargateTaskEnvironment(Environment):
                 "-c",
                 "python -c 'import prefect; prefect.Flow.load(prefect.context.flow_file_path).environment.run_flow()'",
             ]
+            if self.enable_task_revisions:
+                # add flow id to definition tags
+                if not self.task_definition_kwargs.get("tags"):
+                    self.task_definition_kwargs["tags"] = []
+                append_tag = True
+                for i in self.task_definition_kwargs["tags"]:
+                    if i["key"] == "PrefectFlowId":
+                        i["value"] = flow_id
+                        append_tag = False
+                if append_tag:
+                    self.task_definition_kwargs["tags"].append({
+                        "key": "PrefectFlowId",
+                        "value": flow_id
+                    })
+                append_tag = True
+                for i in self.task_definition_kwargs["tags"]:
+                    if i["key"] == "PrefectFlowVersion":
+                        i["value"] = flow_version
+                        append_tag = False
+                if append_tag:
+                    self.task_definition_kwargs["tags"].append({
+                        "key": "PrefectFlowVersion",
+                        "value": flow_version
+                    })
             boto3_c.register_task_definition(
                 requiresCompatibilities=["FARGATE"],
                 networkMode="awsvpc",
@@ -332,7 +333,7 @@ class FargateTaskEnvironment(Environment):
                 "environment": [
                     {
                         "name": "PREFECT__CLOUD__AUTH_TOKEN",
-                        "value": config.cloud.agent.auth_token,
+                        "value": config.cloud.agent.auth_token or config.cloud.auth_token,
                     },
                     {"name": "PREFECT__CONTEXT__FLOW_RUN_ID", "value": flow_run_id},
                     {"name": "PREFECT__CONTEXT__FLOW_RUN_NAME", "value": flow_run_name},
