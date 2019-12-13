@@ -86,6 +86,14 @@ class FargateAgent(Agent):
             aws_session_token=aws_session_token,
             region_name=region_name,
         )
+        if self.enable_task_revisions:
+            self.boto3_client_tags = boto3_client(
+                "resourcegroupstaggingapi",
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token,
+                region_name=region_name,
+            )
 
     def _parse_kwargs(self, user_kwargs: dict) -> tuple:
         """
@@ -224,13 +232,34 @@ class FargateAgent(Agent):
             # if current active task definition has current flow id, then exists
             if self.enable_task_revisions:
                 definition_exists = False
-                for i in definition_response["tags"]:
-                    if i["key"] == "PrefectFlowId" and i["value"] == flow_run.flow.id[:8]:
+                tag_dict = {x['key']: x['value'] for x in definition_response["tags"]}
+                current_flow_id = tag_dict.get('PrefectFlowId')
+                current_flow_version = int(tag_dict.get('PrefectFlowVersion', 0))
+                if current_flow_id == flow_run.flow.id[:8]:
+                    self.logger.debug(
+                        "Active task definition for {} already exists".format(flow_run.flow.id[:8])  # type: ignore
+                    )
+                    definition_exists = True
+                elif flow_run.flow.version < current_flow_version:
+                    tag_search = self.boto3_client_tags.get_resources(
+                        TagFilters=[
+                            {
+                                "Key": "PrefectFlowId",
+                                "Values": [flow_run.flow.id[:8]]
+                            }
+                        ],
+                        ResourceTypeFilters=[
+                            "ecs:task-definition"
+                        ]
+                    )
+                    if tag_search['ResourceTagMappingList']:
+                        self.task_definition_name = [
+                            x.get("ResourceARN") for x in tag_search['ResourceTagMappingList']
+                        ][-1]
                         self.logger.debug(
                             "Active task definition for {} already exists".format(flow_run.flow.id[:8])  # type: ignore
                         )
                         definition_exists = True
-                        break
             else:
                 self.logger.debug(
                     "Task definition {} found".format(task_definition_name)  # type: ignore
@@ -266,6 +295,16 @@ class FargateAgent(Agent):
                 self.task_definition_kwargs["tags"].append({
                     "key": "PrefectFlowId",
                     "value": flow_run.flow.id[:8]
+                })
+            append_tag = True
+            for i in self.task_definition_kwargs["tags"]:
+                if i["key"] == "PrefectFlowVersion":
+                    i["value"] = str(flow_run.flow.version)
+                    append_tag = False
+            if append_tag:
+                self.task_definition_kwargs["tags"].append({
+                    "key": "PrefectFlowVersion",
+                    "value": str(flow_run.flow.version)
                 })
             print(self.task_definition_kwargs["tags"])
         container_definitions = [
@@ -336,6 +375,14 @@ class FargateAgent(Agent):
                     {
                         "name": "PREFECT__CONTEXT__FLOW_RUN_NAME",
                         "value": flow_run.name,  # type: ignore
+                    },
+                    {
+                        "name": "PREFECT__CONTEXT__FLOW_ID",
+                        "value": flow_run.flow.id[:8],  # type: ignore
+                    },
+                    {
+                        "name": "PREFECT__CONTEXT__FLOW_VERSION",
+                        "value": str(flow_run.flow.version),  # type: ignore
                     },
                 ],
             }

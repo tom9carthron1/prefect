@@ -25,6 +25,8 @@ class FargateTaskEnvironment(Environment):
     - `PREFECT__CLOUD__AUTH_TOKEN`
     - `PREFECT__CONTEXT__FLOW_RUN_ID`
     - `PREFECT__CONTEXT__FLOW_RUN_NAME`
+    - `PREFECT__CONTEXT__FLOW_ID`
+    - `PREFECT__CONTEXT__FLOW_VERSION`
     - `PREFECT__CONTEXT__IMAGE`
     - `PREFECT__CONTEXT__FLOW_FILE_PATH`
     - `PREFECT__CLOUD__USE_LOCAL_SECRETS`
@@ -115,7 +117,6 @@ class FargateTaskEnvironment(Environment):
             "family",
             "taskRoleArn",
             "executionRoleArn",
-            "networkMode",
             "containerDefinitions",
             "volumes",
             "placementConstraints",
@@ -176,6 +177,14 @@ class FargateTaskEnvironment(Environment):
             aws_session_token=self.aws_session_token,
             region_name=self.region_name,
         )
+        if self.enable_task_revisions:
+            boto3_client_tags = boto3_client(
+                "resourcegroupstaggingapi",
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+                aws_session_token=self.aws_session_token,
+                region_name=self.region_name,
+            )
         definition_exists = True
         try:
             definition_response = boto3_c.describe_task_definition(
@@ -186,11 +195,36 @@ class FargateTaskEnvironment(Environment):
             )
             if self.enable_task_revisions:
                 flow_id = prefect.context.get("flow_id", "unknown")[:8]
+                flow_version = int(prefect.context.get("flow_version", "0"))
                 definition_exists = False
-                for i in definition_response["tags"]:
-                    if i["key"] == "PrefectFlowId" and i["value"] == flow_id:
+                tag_dict = {x['key']: x['value'] for x in definition_response["tags"]}
+                current_flow_id = tag_dict.get('PrefectFlowId')
+                current_flow_version = int(tag_dict.get('PrefectFlowVersion', 0))
+                if current_flow_id == flow_id:
+                    self.logger.debug(
+                        "Active task definition for {} already exists".format(flow_id)  # type: ignore
+                    )
+                    definition_exists = True
+                elif flow_version < current_flow_version:
+                    tag_search = boto3_client_tags.get_resources(
+                        TagFilters=[
+                            {
+                                "Key": "PrefectFlowId",
+                                "Values": [flow_id]
+                            }
+                        ],
+                        ResourceTypeFilters=[
+                            "ecs:task-definition"
+                        ]
+                    )
+                    if tag_search['ResourceTagMappingList']:
+                        self.task_run_kwargs["taskDefinition"] = [
+                            x.get("ResourceARN") for x in tag_search['ResourceTagMappingList']
+                        ][-1]
+                        self.logger.debug(
+                            "Active task definition for {} already exists".format(flow_id)  # type: ignore
+                        )
                         definition_exists = True
-                        break
                 # add flow id to definition tags
                 if not self.task_definition_kwargs.get("tags"):
                     self.task_definition_kwargs["tags"] = []
@@ -204,7 +238,16 @@ class FargateTaskEnvironment(Environment):
                         "key": "PrefectFlowId",
                         "value": flow_id
                     })
-
+                append_tag = True
+                for i in self.task_definition_kwargs["tags"]:
+                    if i["key"] == "PrefectFlowVersion":
+                        i["value"] = flow_version
+                        append_tag = False
+                if append_tag:
+                    self.task_definition_kwargs["tags"].append({
+                        "key": "PrefectFlowVersion",
+                        "value": flow_version
+                    })
         except ClientError:
             definition_exists = False
 
@@ -261,7 +304,11 @@ class FargateTaskEnvironment(Environment):
                 "-c",
                 "python -c 'import prefect; prefect.Flow.load(prefect.context.flow_file_path).environment.run_flow()'",
             ]
-            boto3_c.register_task_definition(requiresCompatibilities=["FARGATE"], **self.task_definition_kwargs)
+            boto3_c.register_task_definition(
+                requiresCompatibilities=["FARGATE"],
+                networkMode="awsvpc",
+                **self.task_definition_kwargs
+            )
 
     def execute(  # type: ignore
         self, storage: "Docker", flow_location: str, **kwargs: Any
