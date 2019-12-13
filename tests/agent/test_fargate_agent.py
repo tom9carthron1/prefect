@@ -406,6 +406,8 @@ def test_deploy_flows(monkeypatch, runner_token):
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",
@@ -440,6 +442,7 @@ def test_deploy_flows_enable_task_revisions_no_tags(monkeypatch, runner_token):
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
                             "name": "name"
                         }
                     ),
@@ -476,6 +479,7 @@ def test_deploy_flows_enable_task_revisions_tags_current(monkeypatch, runner_tok
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
                             "name": "name"
                         }
                     ),
@@ -495,7 +499,10 @@ def test_deploy_flows_enable_task_revisions_tags_current(monkeypatch, runner_tok
 def test_deploy_flows_enable_task_revisions_tags_new(monkeypatch, runner_token):
     boto3_client = MagicMock()
 
-    boto3_client.describe_task_definition.return_value = {"tags": [{"key": "PrefectFlowId", "value": "old_id"}]}
+    boto3_client.describe_task_definition.return_value = {"tags": [
+        {"key": "PrefectFlowId", "value": "old_id"},
+        {"key": "PrefectFlowVersion", "value": "2"}
+    ]}
     boto3_client.run_task.return_value = {}
 
     monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
@@ -511,6 +518,109 @@ def test_deploy_flows_enable_task_revisions_tags_new(monkeypatch, runner_token):
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 3,
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+    assert boto3_client.describe_task_definition.called
+    assert {"key": "PrefectFlowId", "value": "id"} in agent.task_definition_kwargs["tags"]
+    assert {"key": "PrefectFlowVersion", "value": "3"} in agent.task_definition_kwargs["tags"]
+    assert boto3_client.run_task.called
+    assert agent.task_definition_name == "name"
+
+
+def test_deploy_flows_enable_task_revisions_multiple_flows(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": [
+        {"key": "PrefectFlowId", "value": "old_id"},
+        {"key": "PrefectFlowVersion", "value": "2"}
+    ]}
+    boto3_client.run_task.return_value = {}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id",
+                            "version": 3,
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id",
+                    "name": "name",
+                }
+            ),
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id_4",
+                            "version": 4,
+                            "name": "name"
+                        }
+                    ),
+                    "id": "id_4",
+                    "name": "name",
+                }
+            )
+        ]
+    )
+    assert boto3_client.describe_task_definition.call_count == 2
+    assert boto3_client.register_task_definition.call_count == 2
+    assert {"key": "PrefectFlowId", "value": "id_4"} in agent.task_definition_kwargs["tags"]
+    assert {"key": "PrefectFlowVersion", "value": "4"} in agent.task_definition_kwargs["tags"]
+    assert boto3_client.run_task.call_count == 2
+    assert agent.task_definition_name == "name"
+
+
+def test_deploy_flows_enable_task_revisions_old_version_exists(monkeypatch, runner_token):
+    boto3_client = MagicMock()
+
+    boto3_client.describe_task_definition.return_value = {"tags": [
+        {"key": "PrefectFlowId", "value": "current_id"},
+        {"key": "PrefectFlowVersion", "value": "5"}
+    ]}
+    boto3_client.run_task.return_value = {}
+    boto3_client.get_resources.return_value = {
+        "ResourceTagMappingList": [
+            {
+                "ResourceARN": "arn:aws:ecs:us-east-1:12345:task-definition/flow:22"
+            }
+        ]
+    }
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flows(
+        flow_runs=[
+            GraphQLResult(
+                {
+                    "flow": GraphQLResult(
+                        {
+                            "storage": Docker(
+                                registry_url="test", image_name="name", image_tag="tag"
+                            ).serialize(),
+                            "id": "id",
+                            "version": 3,
                             "name": "name"
                         }
                     ),
@@ -522,9 +632,10 @@ def test_deploy_flows_enable_task_revisions_tags_new(monkeypatch, runner_token):
     )
     print(agent.task_definition_kwargs)
     assert boto3_client.describe_task_definition.called
-    assert {"key": "PrefectFlowId", "value": "id"} in agent.task_definition_kwargs["tags"]
+    assert boto3_client.get_resources.called
+    assert boto3_client.register_task_definition.not_called
     assert boto3_client.run_task.called
-    assert agent.task_definition_name == "name"
+    assert agent.task_definition_name == "arn:aws:ecs:us-east-1:12345:task-definition/flow:22"
 
 
 def test_deploy_flows_require_docker_storage(monkeypatch, runner_token):
@@ -543,6 +654,7 @@ def test_deploy_flows_require_docker_storage(monkeypatch, runner_token):
                         {
                             "storage": Local().serialize(),
                             "id": "id",
+                            "version": 2,
                             "name": "name"
                         }
                     ),
@@ -610,6 +722,8 @@ def test_deploy_flows_all_args(monkeypatch, runner_token):
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",
@@ -632,6 +746,8 @@ def test_deploy_flows_all_args(monkeypatch, runner_token):
                     {"name": "PREFECT__CLOUD__AUTH_TOKEN", "value": ""},
                     {"name": "PREFECT__CONTEXT__FLOW_RUN_ID", "value": "id"},
                     {"name": "PREFECT__CONTEXT__FLOW_RUN_NAME", "value": "name"},
+                    {"name": "PREFECT__CONTEXT__FLOW_ID", "value": "id"},
+                    {"name": "PREFECT__CONTEXT__FLOW_VERSION", "value": "2"},
                 ],
             }
         ]
@@ -665,6 +781,8 @@ def test_deploy_flows_register_task_definition(monkeypatch, runner_token):
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",
@@ -737,6 +855,8 @@ def test_deploy_flows_register_task_definition_all_args(monkeypatch, runner_toke
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",
@@ -841,6 +961,8 @@ def test_deploy_flows_includes_agent_labels_in_environment(monkeypatch, runner_t
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",
@@ -914,6 +1036,8 @@ def test_deploy_flows_register_task_definition_no_repo_credentials(
                                 registry_url="test", image_name="name", image_tag="tag"
                             ).serialize(),
                             "id": "id",
+                            "version": 2,
+                            "name": "name"
                         }
                     ),
                     "id": "id",

@@ -306,7 +306,6 @@ class FargateAgent(Agent):
                     "key": "PrefectFlowVersion",
                     "value": str(flow_run.flow.version)
                 })
-            print(self.task_definition_kwargs["tags"])
         container_definitions = [
             {
                 "name": "flow",
