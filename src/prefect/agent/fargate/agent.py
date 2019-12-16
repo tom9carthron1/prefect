@@ -118,19 +118,24 @@ class FargateAgent(Agent):
 
     def _evaluate_external_kwargs(self, flow_run: GraphQLResult):
         if self.use_external_kwargs:
+            from botocore.exceptions import ClientError
 
             # get external kwargs from S3
-            self.logger.info('Fetching external kwargs from S3')
-            obj = self.s3_resource.Object(
-                self.external_kwargs_s3_bucket,
-                os.path.join(
-                    self.external_kwargs_s3_key,
-                    "{}.json".format(
-                        flow_run.flow.id[:8]
+            try:
+                self.logger.info('Fetching external kwargs from S3')
+                obj = self.s3_resource.Object(
+                    self.external_kwargs_s3_bucket,
+                    os.path.join(
+                        self.external_kwargs_s3_key,
+                        "{}.json".format(
+                            flow_run.flow.id[:8]
+                        )
                     )
                 )
-            )
-            body = obj.get()['Body'].read().decode('utf-8')
+                body = obj.get()['Body'].read().decode('utf-8')
+            except ClientError:
+                self.logger.info('Flow id {} does not have external kwargs.'.format(flow_run.flow.id[:8]))
+                body = '{}'
             self.logger.debug('External kwargs:\n{}'.format(body))
 
             # create new kwargs from merge of default with external
