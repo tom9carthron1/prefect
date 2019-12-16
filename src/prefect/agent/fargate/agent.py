@@ -125,9 +125,8 @@ class FargateAgent(Agent):
                 self.external_kwargs_s3_bucket,
                 os.path.join(
                     self.external_kwargs_s3_key,
-                    flow_run.flow.id[:8],
                     "{}.json".format(
-                        flow_run.flow.name
+                        flow_run.flow.id[:8]
                     )
                 )
             )
