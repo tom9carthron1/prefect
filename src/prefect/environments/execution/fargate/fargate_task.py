@@ -67,9 +67,9 @@ class FargateTaskEnvironment(Environment):
         - on_start (Callable, optional): a function callback which will be called before the flow begins to run
         - on_exit (Callable, optional): a function callback which will be called after the flow finishes its run
         - enable_task_revisions (bool, optional): Enable registration of task definitions using revisions.
-            When enabled, your flow's task definition will be registered with a tag called 'PrefectFlowId'.
-            If the current 'ACTIVE' task definition has a different PrefectFlowId, a new task definition
-            will get registered and the current task definition will be de-registered.
+            When enabled, task definitions will use flow name as opposed to flow id and each new version will be a
+            task definition revision. Each revision will be registered with a tag called 'PrefectFlowId'
+            and 'PrefectFlowVersion' to enable proper lookup for existing revisions.
             Defaults to False.
         - **kwargs (dict, optional): additional keyword arguments to pass to boto3 for
             `register_task_definition` and `run_task`
