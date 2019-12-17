@@ -1,6 +1,7 @@
 from ast import literal_eval
 import os
 from typing import Iterable
+import re
 
 from prefect import config
 from prefect.agent import Agent
@@ -186,7 +187,8 @@ class FargateAgent(Agent):
             # set proper task_definition_name based on enable_task_revisions flag
             if self.enable_task_revisions:
                 self.logger.debug("Native ECS task revisions enabled")
-                self.task_definition_name = flow_run.flow.name
+                # adding regex to conform to task definition naming conventions
+                self.task_definition_name = re.sub(r'[^a-zA-Z0-9]', '_', flow_run.flow.name)
             else:
                 self.task_definition_name = "prefect-task-{}".format(
                     flow_run.flow.id[:8]  # type: ignore
