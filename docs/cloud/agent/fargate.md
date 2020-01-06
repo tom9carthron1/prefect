@@ -215,6 +215,17 @@ This means that for each flow, the proper task definition, based on flow ID and 
   - <flow name>:<revision number>
 ```
 
+:::tip IAM access when using `enable_task_revisions`
+This feature makes use of the AWS resource tagging api.  Your agent will need access to get resources and tags per [documentation](https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/Welcome.html) by adding these actions to your IAM policy:
+```
+tag:GetResources
+
+tag:GetTagKeys
+
+tag:GetTagValues
+```
+:::
+
 ### Configuration Examples
 
 Below are two minimal examples which specify information for connecting to boto3 as well as the task's resource requests and network configuration. The first example initializes a `FargateAgent` with kwargs passed in and the second example uses the Prefect CLI to start the Fargate Agent with kwargs being loaded from environment variables.
