@@ -409,7 +409,17 @@ class FargateAgent(Agent):
                         task_definition_name
                     )  # type: ignore
                 )
-        except ClientError:
+        except ClientError as e:
+            self.logger.debug(
+                "boto3 Client Error: {}".format(
+                    str(e)
+                ) # type: ignore
+            )
+            self.logger.debug(
+                "Task definition for {} marked for creation".format(
+                    flow_run.flow.id[:8]
+                )  # type: ignore
+            )
             return False
         return definition_exists
 
