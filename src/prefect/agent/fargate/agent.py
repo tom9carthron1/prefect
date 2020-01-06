@@ -376,6 +376,9 @@ class FargateAgent(Agent):
             if self.enable_task_revisions:
                 definition_exists = False
                 tag_dict = {x["key"]: x["value"] for x in definition_response["tags"]}
+                self.logger.debug(
+                    "Current task definition tags: {}".format(tag_dict)  # type: ignore
+                )
                 current_flow_id = tag_dict.get("PrefectFlowId")
                 current_flow_version = int(tag_dict.get("PrefectFlowVersion", 0))
                 if current_flow_id == flow_run.flow.id[:8]:
@@ -411,9 +414,7 @@ class FargateAgent(Agent):
                 )
         except ClientError as e:
             self.logger.debug(
-                "boto3 Client Error: {}".format(
-                    str(e)
-                ) # type: ignore
+                "boto3 Client Error: {}".format(str(e))  # type: ignore
             )
             self.logger.debug(
                 "Task definition for {} marked for creation".format(
