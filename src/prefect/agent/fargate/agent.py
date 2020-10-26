@@ -119,6 +119,7 @@ class FargateAgent(Agent):
         use_external_kwargs: bool = False,
         external_kwargs_s3_bucket: str = None,
         external_kwargs_s3_key: str = None,
+        extra_containers: Iterable[dict]
         **kwargs,
     ) -> None:
         super().__init__(
