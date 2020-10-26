@@ -2,7 +2,7 @@ import copy
 import json
 import os
 from ast import literal_eval
-from typing import Iterable
+from typing import Any, Iterable
 import uuid
 
 from slugify import slugify
@@ -119,6 +119,7 @@ class FargateAgent(Agent):
         use_external_kwargs: bool = False,
         external_kwargs_s3_bucket: str = None,
         external_kwargs_s3_key: str = None,
+        extra_containers: Iterable[Any] = None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -150,6 +151,7 @@ class FargateAgent(Agent):
         self.external_kwargs_s3_bucket = external_kwargs_s3_bucket
         self.external_kwargs_s3_key = external_kwargs_s3_key
         self.launch_type = launch_type
+        self.extra_containers = extra_containers
 
         # Parse accepted kwargs for task definition, run, and container definitions key of task
         # definition
@@ -157,6 +159,7 @@ class FargateAgent(Agent):
             self.task_definition_kwargs,
             self.task_run_kwargs,
             self.container_definitions_kwargs,
+            self.extra_containers_kwargs,
         ) = self._parse_kwargs(kwargs, True)
 
         # Client initialization
@@ -244,6 +247,7 @@ class FargateAgent(Agent):
             ext_task_definition_kwargs,
             ext_task_run_kwargs,
             ext_container_definitions_kwargs,
+            ext_extra_containers_kwargs,
         ) = self._parse_kwargs(external_kwargs)
         self.logger.debug(
             "External task definition kwargs:\n{}".format(ext_task_definition_kwargs)
@@ -258,6 +262,7 @@ class FargateAgent(Agent):
         flow_task_definition_kwargs.update(ext_task_definition_kwargs)
         flow_task_run_kwargs.update(ext_task_run_kwargs)
         flow_container_definitions_kwargs.update(ext_container_definitions_kwargs)
+        self.extra_containers = ext_extra_containers_kwargs
 
     def _add_flow_tags(
         self, flow_run: GraphQLResult, flow_task_definition_kwargs: dict
@@ -307,8 +312,8 @@ class FargateAgent(Agent):
             - check_envars (bool): Whether to check envars for kwargs
 
         Returns:
-            tuple: a tuple of three dictionaries (task_definition_kwargs, task_run_kwargs,
-              container_definitions_kwargs)
+            tuple: a tuple of four dictionaries (task_definition_kwargs, task_run_kwargs,
+              container_definitions_kwargs, extra_containers_kwargs)
         """
         definition_kwarg_list = [
             "taskRoleArn",
@@ -402,6 +407,13 @@ class FargateAgent(Agent):
                 container_definitions_kwargs.update({key: item})
                 self.logger.debug("{} = {}".format(key, item))
 
+        extra_containers_kwargs = []
+        extra_container_defs = user_kwargs.get("extraContainersDefinitions", [{}])
+        try:
+            extra_containers_kwargs = literal_eval(extra_container_defs)
+        except (ValueError, SyntaxError):
+            pass
+
         # Check environment if keys were not provided
         if check_envars:
             for key in definition_kwarg_list:
@@ -442,7 +454,7 @@ class FargateAgent(Agent):
                         pass
                     container_definitions_kwargs.update({key: cd_env_value})
 
-        return task_definition_kwargs, task_run_kwargs, container_definitions_kwargs
+        return task_definition_kwargs, task_run_kwargs, container_definitions_kwargs, extra_containers_kwargs
 
     def deploy_flow(self, flow_run: GraphQLResult) -> str:
         """
@@ -682,6 +694,10 @@ class FargateAgent(Agent):
             container_definitions[0][
                 "repositoryCredentials"
             ] = container_definitions_kwargs.get("repositoryCredentials", {})
+
+        # If additional containers have been provided, add them to the container definition
+        if self.extra_containers:
+            container_definitions.extend(self.extra_containers)
 
         # If networkMode is not provided, default to awsvpc
         networkMode = flow_task_definition_kwargs.pop("networkMode", "awsvpc")
