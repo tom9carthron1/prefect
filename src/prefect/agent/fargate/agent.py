@@ -119,7 +119,6 @@ class FargateAgent(Agent):
         use_external_kwargs: bool = False,
         external_kwargs_s3_bucket: str = None,
         external_kwargs_s3_key: str = None,
-        extra_containers: Iterable[dict]
         **kwargs,
     ) -> None:
         super().__init__(
@@ -490,17 +489,28 @@ class FargateAgent(Agent):
         image = get_flow_image(flow_run=flow_run)
         flow_run_command = get_flow_run_command(flow_run=flow_run)
 
-        # check if task definition exists
-        self.logger.debug("Checking for task definition")
-        if not self._verify_task_definition_exists(flow_run, task_definition_dict):
-            self.logger.debug("No task definition found")
-            self._create_task_definition(
-                image=image,
-                flow_task_definition_kwargs=flow_task_definition_kwargs,
-                container_definitions_kwargs=flow_container_definitions_kwargs,
-                task_definition_name=task_definition_dict["task_definition_name"],
-                flow_run_command=flow_run_command,
-            )
+        # check if task_definition_override exists in run context
+        task_definition_override = flow_run.serialized_state.context.get(
+            "task_definition_override"
+        )
+        if task_definition_override:
+            # task_definition_override must be the family and revision (family:revision ) or full ARN of the task definition to run.
+            # If a revision is not specified, the latest ACTIVE revision is used.
+            task_definition_dict[
+                "task_definition_name"
+            ] = flow_run.serialized_state.context.task_definition_override
+        else:
+            # check if task definition exists and create if needed
+            self.logger.debug("Checking for task definition")
+            if not self._verify_task_definition_exists(flow_run, task_definition_dict):
+                self.logger.debug("No task definition found")
+                self._create_task_definition(
+                    image=image,
+                    flow_task_definition_kwargs=flow_task_definition_kwargs,
+                    container_definitions_kwargs=flow_container_definitions_kwargs,
+                    task_definition_name=task_definition_dict["task_definition_name"],
+                    flow_run_command=flow_run_command,
+                )
 
         # run task
         task_arn = self._run_task(

@@ -663,6 +663,7 @@ def test_deploy_flow_local_storage_raises(monkeypatch, cloud_api):
                         }
                     ),
                     "id": "id",
+                    "serialized_state": {"context": {}},
                 }
             ),
         )
@@ -695,6 +696,7 @@ def test_deploy_flow_docker_storage_raises(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -761,6 +763,7 @@ def test_deploy_flow_all_args(monkeypatch, cloud_api):
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -815,6 +818,7 @@ def test_deploy_flow_register_task_definition(monkeypatch, cloud_api):
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -853,6 +857,7 @@ def test_deploy_flow_register_task_definition_uses_environment_metadata(
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -897,6 +902,7 @@ def test_deploy_flow_register_task_definition_uses_user_env_vars(
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1023,6 +1029,7 @@ def test_deploy_flow_register_task_definition_all_args(
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1158,6 +1165,7 @@ def test_deploy_flows_includes_agent_labels_in_environment(
                     }
                 ),
                 "id": "id",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1231,6 +1239,7 @@ def test_deploy_flows_require_docker_storage(monkeypatch, cloud_api):
                     ),
                     "id": "id",
                     "name": "name",
+                    "serialized_state": {"context": {}},
                 }
             )
         )
@@ -1268,6 +1277,7 @@ def test_deploy_flows_enable_task_revisions_no_tags(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1341,6 +1351,7 @@ def test_deploy_flows_enable_task_revisions_tags_current(monkeypatch, cloud_api)
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1385,6 +1396,7 @@ def test_deploy_flows_enable_task_revisions_old_version_exists(monkeypatch, clou
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1459,6 +1471,7 @@ def test_override_kwargs(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         ),
         definition_kwargs,
@@ -1528,6 +1541,7 @@ def test_override_kwargs_exception(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         ),
         definition_kwargs,
@@ -1577,6 +1591,7 @@ def test_deploy_flows_enable_task_revisions_tags_passed_in(monkeypatch, cloud_ap
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1647,6 +1662,7 @@ def test_deploy_flows_enable_task_revisions_with_external_kwargs(
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1758,6 +1774,7 @@ def test_deploy_flows_disable_task_revisions_with_external_kwargs(
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1784,6 +1801,81 @@ def test_deploy_flows_disable_task_revisions_with_external_kwargs(
         tags=[{"key": "test", "value": "test"}],
     )
     assert boto3_client.run_task.called_with(taskDefinition="prefect-task-new_id")
+
+
+def test_deploy_flows_with_task_definition_override(monkeypatch, cloud_api):
+    boto3_client = MagicMock()
+
+    boto3_client.run_task.return_value = {"tasks": [{"taskArn": "test"}]}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent()
+    agent.deploy_flow(
+        GraphQLResult(
+            {
+                "flow": GraphQLResult(
+                    {
+                        "storage": Docker(
+                            registry_url="test", image_name="name", image_tag="tag"
+                        ).serialize(),
+                        "environment": LocalEnvironment().serialize(),
+                        "id": "id",
+                        "version": 2,
+                        "name": "name",
+                        "core_version": "0.13.0",
+                    }
+                ),
+                "id": "id",
+                "name": "name",
+                "serialized_state": {
+                    "context": {"task_definition_override": "override-task:1"}
+                },
+            }
+        )
+    )
+    assert boto3_client.describe_task_definition.not_called
+    assert boto3_client.register_task_definition.not_called
+    assert boto3_client.run_task.called
+    assert boto3_client.run_task.called_with(taskDefinition="override-task:1")
+
+
+def test_deploy_flows_with_task_definition_override_and_enable_task_revisions(
+    monkeypatch, cloud_api
+):
+    boto3_client = MagicMock()
+    boto3_client.run_task.return_value = {"tasks": [{"taskArn": "test"}]}
+
+    monkeypatch.setattr("boto3.client", MagicMock(return_value=boto3_client))
+
+    agent = FargateAgent(enable_task_revisions=True)
+    agent.deploy_flow(
+        GraphQLResult(
+            {
+                "flow": GraphQLResult(
+                    {
+                        "storage": Docker(
+                            registry_url="test", image_name="name", image_tag="tag"
+                        ).serialize(),
+                        "environment": LocalEnvironment().serialize(),
+                        "id": "id",
+                        "version": 2,
+                        "name": "name",
+                        "core_version": "0.13.0",
+                    }
+                ),
+                "id": "id",
+                "name": "name",
+                "serialized_state": {
+                    "context": {"task_definition_override": "override-task:1"}
+                },
+            }
+        )
+    )
+    assert boto3_client.describe_task_definition.not_called
+    assert boto3_client.register_task_definition.not_called
+    assert boto3_client.run_task.called
+    assert boto3_client.run_task.called_with(taskDefinition="override-task:1")
 
 
 def test_deploy_flows_launch_type_ec2(monkeypatch, cloud_api):
@@ -1833,6 +1925,7 @@ def test_deploy_flows_launch_type_ec2(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
@@ -1908,6 +2001,7 @@ def test_deploy_flows_launch_type_none(monkeypatch, cloud_api):
                 ),
                 "id": "id",
                 "name": "name",
+                "serialized_state": {"context": {}},
             }
         )
     )
