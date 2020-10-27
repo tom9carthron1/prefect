@@ -197,6 +197,72 @@ def test_parse_container_definition_kwargs(monkeypatch, cloud_api):
         "mountPoints": "test",
         "logConfiguration": "test",
         "repositoryCredentials": "repo",
+        "extraContainerDefinitions": []
+    }
+
+
+def test_parse_container_definition_kwargs_with_sidecars(monkeypatch, cloud_api):
+    boto3_client = MagicMock()
+    monkeypatch.setattr("boto3.client", boto3_client)
+
+    agent = FargateAgent()
+
+    kwarg_dict = {
+        "containerDefinitions": [
+            {
+                "environment": "test",
+                "secrets": "test",
+                "mountPoints": "test",
+                "logConfiguration": "test",
+                "repositoryCredentials": "repo",
+            },
+            {
+                "name": "datadog-agent",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": [
+                    {
+                        "name": "DD_API_KEY",
+                        "value": "123456"
+                    },
+                    {
+                        "name": "ECS_FARGATE",
+                        "value": "true"
+                    }
+                ]
+            }
+        ]
+    }
+
+    (
+        task_definition_kwargs,
+        task_run_kwargs,
+        container_definitions_kwargs,
+    ) = agent._parse_kwargs(kwarg_dict)
+
+    assert container_definitions_kwargs == {
+        "environment": "test",
+        "secrets": "test",
+        "mountPoints": "test",
+        "logConfiguration": "test",
+        "repositoryCredentials": "repo",
+        "extraContainerDefinitions": [
+            {
+                "name": "datadog-agent",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": [
+                    {
+                        "name": "DD_API_KEY",
+                        "value": "123456"
+                    },
+                    {
+                        "name": "ECS_FARGATE",
+                        "value": "true"
+                    }
+                ]
+            }
+        ]
     }
 
 
@@ -215,6 +281,21 @@ def test_parse_container_definition_kwargs_provided_as_string(monkeypatch, cloud
                     "mountPoints": "test",
                     "logConfiguration": "test",
                     "repositoryCredentials": "repo",
+                },
+                {
+                    "name": "datadog-agent",
+                    "image": "datadog/agent:latest",
+                    "essential": True,
+                    "environment": [
+                        {
+                            "name": "DD_API_KEY",
+                            "value": "123456"
+                        },
+                        {
+                            "name": "ECS_FARGATE",
+                            "value": "true"
+                        }
+                    ]
                 }
             ]
         )
@@ -232,34 +313,24 @@ def test_parse_container_definition_kwargs_provided_as_string(monkeypatch, cloud
         "mountPoints": "test",
         "logConfiguration": "test",
         "repositoryCredentials": "repo",
-    }
-
-
-def test_parse_container_definition_kwargs_errors_on_multiple(monkeypatch, cloud_api):
-    boto3_client = MagicMock()
-    monkeypatch.setattr("boto3.client", boto3_client)
-
-    agent = FargateAgent()
-
-    kwarg_dict = {
-        "containerDefinitions": [
+        "extraContainerDefinitions": [
             {
-                "environment": "test",
-                "secrets": "test",
-                "mountPoints": "test",
-                "logConfiguration": "test",
-                "repositoryCredentials": "repo",
-            },
-            {"test": "here"},
+                "name": "datadog-agent",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": [
+                    {
+                        "name": "DD_API_KEY",
+                        "value": "123456"
+                    },
+                    {
+                        "name": "ECS_FARGATE",
+                        "value": "true"
+                    }
+                ]
+            }
         ]
     }
-
-    with pytest.raises(ValueError):
-        (
-            task_definition_kwargs,
-            task_run_kwargs,
-            container_definitions_kwargs,
-        ) = agent._parse_kwargs(kwarg_dict)
 
 
 def test_parse_container_definition_kwargs_errors(monkeypatch, cloud_api):
@@ -293,7 +364,8 @@ def test_parse_container_definition_kwargs_errors(monkeypatch, cloud_api):
                 "name": "TEST_SECRET1",
                 "valueFrom": "arn:aws:ssm:us-east-1:123456789101:parameter/test/test",
             }
-        ]
+        ],
+        "extraContainerDefinitions": []
     }
 
 
@@ -387,7 +459,9 @@ def test_parse_task_kwargs_invalid_value_removed(monkeypatch, cloud_api):
 
     assert task_definition_kwargs == {}
     assert task_run_kwargs == {}
-    assert container_definitions_kwargs == {}
+    assert container_definitions_kwargs == {
+        "extraContainerDefinitions": []
+    }
 
 
 def test_fargate_agent_config_options_init(monkeypatch, cloud_api):
@@ -430,6 +504,7 @@ def test_fargate_agent_config_options_init(monkeypatch, cloud_api):
         "secrets": "test",
         "mountPoints": "test",
         "logConfiguration": "test",
+        "extraContainerDefinitions": []
     }
 
     kwarg_dict = {
@@ -528,6 +603,14 @@ def test_fargate_agent_config_env_vars(monkeypatch, cloud_api):
         "secrets": "test",
         "mountPoints": "test",
         "logConfiguration": "test",
+        "extraContainerDefinitions": [
+            {
+                "name": "test",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": []
+            }
+        ]
     }
 
     # Client args
@@ -561,6 +644,10 @@ def test_fargate_agent_config_env_vars(monkeypatch, cloud_api):
     monkeypatch.setenv("containerDefinitions_secrets", "test")
     monkeypatch.setenv("containerDefinitions_mountPoints", "test")
     monkeypatch.setenv("containerDefinitions_logConfiguration", "test")
+    monkeypatch.setenv(
+        "containerDefinitions_extraContainerDefinitions",
+        '[{"name": "test", "image": "datadog/agent:latest", "essential": True, "environment": []}]'
+    )
 
     agent = FargateAgent(subnets=["subnet"])
     assert agent
@@ -601,6 +688,14 @@ def test_fargate_agent_config_env_vars_lists_dicts(monkeypatch, cloud_api):
         "mountPoints": [
             {"sourceVolume": "myEfsVolume", "containerPath": "/data", "readOnly": False}
         ],
+        "extraContainerDefinitions": [
+            {
+                "name": "test",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": []
+            }
+        ]
     }
 
     # Client args
@@ -622,6 +717,10 @@ def test_fargate_agent_config_env_vars_lists_dicts(monkeypatch, cloud_api):
     monkeypatch.setenv(
         "containerDefinitions_mountPoints",
         '[{"sourceVolume": "myEfsVolume", "containerPath": "/data", "readOnly": False}]',
+    )
+    monkeypatch.setenv(
+        "containerDefinitions_extraContainerDefinitions",
+        '[{"name": "test", "image": "datadog/agent:latest", "essential": True, "environment": []}]'
     )
 
     agent = FargateAgent(subnets=["subnet"])
@@ -1434,7 +1533,22 @@ def test_override_kwargs(monkeypatch, cloud_api):
                   "containerPath": "/data",
                   "readOnly": false
                 }]
-              }]
+              },
+              {
+                "name": "datadog-agent",
+                "image": "datadog/agent:latest",
+                "essential": true,
+                "environment": [
+                    {
+                        "name": "DD_API_KEY",
+                        "value": "123456"
+                    },
+                    {
+                        "name": "ECS_FARGATE",
+                        "value": "true"
+                    }
+                ]
+            }]
             }"""
     boto3_resource.return_value.Object.return_value.get.return_value = {
         "Body": streaming_body
@@ -1498,6 +1612,23 @@ def test_override_kwargs(monkeypatch, cloud_api):
         "mountPoints": [
             {"sourceVolume": "myEfsVolume", "containerPath": "/data", "readOnly": False}
         ],
+        "extraContainerDefinitions": [
+            {
+                "name": "datadog-agent",
+                "image": "datadog/agent:latest",
+                "essential": True,
+                "environment": [
+                    {
+                        "name": "DD_API_KEY",
+                        "value": "123456"
+                    },
+                    {
+                        "name": "ECS_FARGATE",
+                        "value": "true"
+                    }
+                ]
+            }
+        ]
     }
 
 
@@ -1553,7 +1684,9 @@ def test_override_kwargs_exception(monkeypatch, cloud_api):
     assert streaming_body.read().decode.called
     assert definition_kwargs == {}
     assert run_kwargs == {}
-    assert container_definitions_kwargs == {}
+    assert container_definitions_kwargs == {
+        "extraContainerDefinitions": []
+    }
 
 
 def test_deploy_flows_enable_task_revisions_tags_passed_in(monkeypatch, cloud_api):
